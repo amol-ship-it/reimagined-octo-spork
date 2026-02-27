@@ -1,18 +1,17 @@
 # Cognitive Fractal
 
-A recursive learning system built from self-similar fractals, grounded in the Four Pillars of Learning.
+A recursive learning system built from self-similar fractals, grounded in the Four Pillars of Learning. Streams numeric sequences, discovers their generating functions symbolically, and predicts future values.
 
 ```
-  Steps   1- 30: avg_error=0.1141  accuracy= 89.7%  fitness=0.3038  fractals=3
-  Steps  91-120: avg_error=0.0000  accuracy= 97.5%  fitness=0.9617  fractals=3
-  Steps 271-300: avg_error=0.0000  accuracy= 99.0%  fitness=0.9999  fractals=3
+  === QUADRATIC STREAM: y = 2x^2 - 3x + 7 ===
+  Step  30 | pred=1237.00 actual=1237.00 err=0.0000 | formula: 2.00*x^2 + -3.00*x + 7.00
+  Step  50 | pred=4707.00 actual=4707.00 err=0.0000 | formula: 2.00*x^2 + -3.00*x + 7.00
+  Predict next 5: [5107, 5507, 5917, 6337, 6767]
+  STATUS: PASS
 
-  LEARNED FRACTALS:
-    e0fb0691: prototype~A  fitness=1.000  exposures=100
-    8cf02b2d: prototype~B  fitness=1.000  exposures=100
-    bf993183: prototype~C  fitness=1.000  exposures=100
-
-  SUCCESS: System learned to predict the sequence.
+  === MANDELBROT ORBIT: z(n+1) = z(n)^2 + c ===
+  Predictions stay finite: True
+  STATUS: PASS
 ```
 
 ## The Core Idea
@@ -21,225 +20,162 @@ Intelligence is not a collection of preset rules. It is an emergent property of 
 
 This system implements that idea from first principles. The smallest building block — the **Fractal** — is a self-contained learning agent that compares, predicts, and updates itself. The same mechanism operates at every level: a fractal that detects phonemes and a fractal that detects sentences run identical code. Complexity emerges from composition, not from special-purpose modules.
 
+## Quick Start
+
+**Predict a sequence in three lines:**
+
+```python
+from cognitive_fractal import SequencePredictor
+
+predictor = SequencePredictor()
+# Feed a quadratic sequence: y = 2x^2 - 3x + 7
+for x in range(100):
+    result = predictor.feed(2*x**2 - 3*x + 7)
+
+print(result["formula"])      # 2.00*x^2 + -3.00*x + 7.00
+print(predictor.predict(5))   # Next 5 values
+print(predictor.accuracy())   # MAE, fitness, formula
+```
+
+**Run the demos:**
+
+```bash
+pip install numpy
+python demos/demo_mvp.py          # Sequence prediction (quadratic + Mandelbrot)
+python demos/demo_symbolic.py     # Symbolic function discovery
+python demos/demo_transfer.py     # Cross-stream pattern reuse
+python demos/demo_improvements.py # Gradient descent, exotic functions
+python demos/demo_sequence.py     # Core fractal learning (A-B-C sequence)
+```
+
+**Run the tests:**
+
+```bash
+pip install pytest
+python -m pytest tests/ -v    # 175 tests
+```
+
+## Architecture
+
+The system has two layers that build on each other.
+
+### Layer 1: Core Fractal Engine
+
+The foundation. Self-similar fractals that learn to recognize and predict raw signal patterns through the Four Pillars of Learning (see below).
+
+### Layer 2: Symbolic Function Discovery
+
+Built on the core, this layer discovers the mathematical function generating a numeric stream. Instead of matching raw vectors, it maintains a population of **candidate function fractals** — each one a hypothesis about the generating function — and evolves them through competition and composition.
+
+```
+Stream: 7, 6, 9, 16, 27, 42, 61, 84, ...
+                    |
+            SymbolicEngine.step()
+                    |
+    ┌───────────────┼───────────────┐
+    │               │               │
+ LinearFractal  QuadraticFractal  SinFractal ...
+ y = ax + b     y = ax^2+bx+c    y = a*sin(bx+c)+d
+ RMSE: 45.2     RMSE: 0.001      RMSE: 38.7
+                    |
+              Winner: Quadratic
+              Formula: 2.00*x^2 + -3.00*x + 7.00
+```
+
+## Function Types
+
+The system discovers functions from a library of 14 fractal types:
+
+| Category | Types | Example |
+|----------|-------|---------|
+| **Basic** | Constant, Linear, Quadratic, Polynomial | `2.00*x^2 + -3.00*x + 7.00` |
+| **Trigonometric** | Sin, Cos, GradientSin, GradientCos | `3.50*sin(0.80*x + 1.20) + 2.00` |
+| **Exotic** | Exponential, Log | `2.10*exp(0.05*x) + -1.30` |
+| **Composed (arithmetic)** | Add, Subtract, Multiply, Divide | `sin(x) + quadratic(x)` |
+| **Composed (nested)** | NestedComposed | `sin(quadratic(x))` — true g(f(x)) |
+
+**Composition is automatic.** The engine periodically attempts to combine existing candidates:
+- **Arithmetic:** tries `f(x) + g(x)`, `f(x) - g(x)`, `f(x) * g(x)`, `f(x) / g(x)`
+- **Nested:** tries `g(f(x))` for all viable (inner, outer) pairs — e.g. `sin(x^2 + 3)`
+
 ## The Four Pillars of Learning
 
-The theoretical foundation defines four recursive processes that must operate continuously for a system to be self-improving. Every line of code in this project exists to serve one of these pillars.
+Every line of code serves one of these four recursive processes.
 
 ### Pillar 1: Feedback Loops
 
-*The basic stimulus/response mechanism. Learning from immediate or long-term signals.*
+*Learning from immediate or long-term signals.*
 
-A fractal that cannot close the loop between prediction and outcome cannot learn. The feedback loop is the heartbeat of the system.
-
-**How it works in the code:**
-
-The engine runs a continuous cycle: **process &rarr; predict &rarr; observe outcome &rarr; learn**.
-
-```
-engine.step(input_A)  # Fractal processes A, predicts "B will come next"
-engine.step(input_B)  # B arrives — this IS the feedback for the previous prediction
-                      # The fractal that predicted B now learns from the error
-```
-
-At each step, the current input serves as the actual outcome of the previous prediction. This closes the loop naturally without requiring an external teacher.
-
-Inside `Fractal.learn()`, the feedback drives three concrete updates:
-
-| Update | What changes | How |
-|--------|-------------|-----|
-| Prototype shift | What the fractal "expects" | Exponential moving average toward recent input |
-| Variance tracking | How spread out inputs are | Running estimate of per-dimension variance |
-| Prediction weights | Input &rarr; next-input mapping | Outer-product gradient rule on prediction error |
-
-The prediction error is tracked as an exponential moving average in `Metrics.prediction_error_ema`, giving a real-time measure of how well the fractal is closing its own loop.
-
-**Key files:** [`fractal.py`](cognitive_fractal/fractal.py) (`process()` + `learn()`), [`engine.py`](cognitive_fractal/engine.py) (`step()`)
-
----
+The engine runs a continuous cycle: **process &rarr; predict &rarr; observe outcome &rarr; learn**. Each new value serves as feedback for the previous prediction. In the symbolic layer, every incoming value triggers a refit of all candidate functions, and prediction error drives pruning.
 
 ### Pillar 2: Approximability
 
-*The ability to iterate upon a pattern to improve its accuracy and utility over time.*
+*Iterative refinement toward accuracy.*
 
-A fractal starts ignorant. Its prototype is initialized to the first input it sees, its prediction weights are near-zero, and its fitness is 0.0. Through repeated exposure and feedback, it converges toward an accurate model of its input distribution.
-
-**How it works in the code:**
-
-Every call to `learn()` nudges the fractal closer to the truth:
-
-```python
-# Prototype converges via EMA — each exposure sharpens the estimate
-self.prototype += learning_rate * (last_input - self.prototype)
-
-# Prediction weights converge via gradient descent on prediction error
-pred_error = actual - predicted
-self.prediction_weights += learning_rate * outer(pred_error, normalized_input)
-self._prediction_bias += learning_rate * pred_error
-```
-
-This is not a one-shot adjustment. It is iterative refinement — the same input seen 100 times produces a fractal with fitness approaching 1.0, while a fractal that has seen an input once has fitness near 0.0. The approximation improves with every cycle.
-
-The variance tracker adds a second dimension of refinement. A fractal that has seen many inputs knows not just the center of its distribution (prototype) but also how much each dimension varies. This prevents false novelty signals when input naturally fluctuates.
-
-**Measurable proof:**
-
-```
-Step   1: prediction_error=0.11  fitness=0.00
-Step  30: prediction_error=0.00  fitness=0.30
-Step 120: prediction_error=0.00  fitness=0.96
-Step 300: prediction_error=0.00  fitness=1.00
-```
-
-**Key files:** [`fractal.py`](cognitive_fractal/fractal.py) (`learn()` — Updates 1, 2, 3), [`types.py`](cognitive_fractal/types.py) (`Metrics.fitness()`)
-
----
+Fractals start ignorant and converge. In the core layer, prototypes shift via EMA and prediction weights via gradient descent. In the symbolic layer, function coefficients are refined via least-squares and warm-start gradient descent. A fractal seen 100 times has fitness near 1.0; one seen once has fitness near 0.0.
 
 ### Pillar 3: Composability
 
-*Reusing learned patterns in new contexts. Abstraction allows old solutions to solve new problems.*
+*Reusing learned patterns in new contexts.*
 
-Patterns are features. Once a pattern is learned, it is abstract and domain-agnostic — it can be applied in novel contexts. Composition is recursive: new patterns are formed by leveraging existing sub-patterns, the way bricks compose into walls, walls into buildings, buildings into cities.
-
-**How it works in the code:**
-
-A composed fractal routes input through its children, then operates on their outputs:
-
-```python
-# A parent fractal with two children
-parent = Fractal(dim=8)
-parent.add_child(child_phoneme_detector)   # Detects low-level sound patterns
-parent.add_child(child_rhythm_detector)    # Detects timing patterns
-
-# When parent.process() is called:
-#   1. Input flows through BOTH children (each runs process())
-#   2. Children's predictions are concatenated into a feature vector
-#   3. Parent compares THAT to its own prototype
-#   4. Parent makes its own prediction in the composed feature space
-```
-
-The critical property: **the parent and children run identical code**. `Fractal.process()` does not check whether it is a leaf or a root — it simply processes. If it has children, it delegates first. If not, it operates on raw input. This is structural self-similarity, not a metaphor.
-
-Feedback propagates recursively too. When a parent learns, it calls `child.learn()` for each child, so the entire hierarchy improves simultaneously.
-
-```
-Leaf fractals       →  detect edges, phonemes, raw features
-Composed fractals   →  detect words, patterns-of-patterns
-Deeper composition  →  detect sentences, abstract concepts
-```
-
-The output of one level becomes the input for the next. This is the recursive building block hierarchy from the theoretical framework — atomic patterns compose into sub-patterns, sub-patterns into high-level abstractions.
-
-**Key files:** [`fractal.py`](cognitive_fractal/fractal.py) (`add_child()`, `process()` composed branch, `_aggregate_child_outputs()`), [`engine.py`](cognitive_fractal/engine.py) (`compose()`)
-
----
+Patterns are features. Composition is recursive. In the core layer, child fractals feed into parents. In the symbolic layer, existing function candidates are combined via arithmetic operations and true nested composition g(f(x)). Composed patterns are stored in shared Memory for cross-stream reuse.
 
 ### Pillar 4: Exploration
 
-*Building new patterns from scratch or by combining existing ones in novel ways.*
+*Discovering new patterns when existing ones fail.*
 
-A system that only refines existing patterns will never discover new ones. Exploration is the mechanism that creates fresh fractals when the current population cannot explain the input.
+When no candidate explains the input, the system spawns new fractals. The symbolic engine periodically introduces fresh candidates and exotic function types. Function signatures (32-element shape vectors) enable similarity-based retrieval from Memory, so previously learned patterns from other streams can seed new explorations.
 
-**How it works in the code:**
+## Transfer Learning
 
-The engine measures how well existing fractals match each incoming input using cosine similarity against their learned prototypes. When nothing matches well, a new fractal is born:
+Multiple `SymbolicEngine` instances can share the same `Memory`. When one engine discovers a useful pattern (e.g., a sine function), it stores the pattern's signature. A second engine encountering similar data retrieves that pattern and uses it as a warm start — skipping the discovery phase entirely.
 
 ```python
-# Inside engine.step():
-fractal, match_score = self._select_fractal(raw_input)
+from cognitive_fractal import SymbolicEngine, Memory
 
-if fractal is None or match_score < (1.0 - self.novelty_threshold):
-    # Nothing in memory explains this input — EXPLORE
-    fractal = self._spawn_fractal(raw_input)
+shared_memory = Memory(capacity=200)
+engine_a = SymbolicEngine(memory=shared_memory)
+engine_b = SymbolicEngine(memory=shared_memory)
+
+# Engine A discovers sin pattern
+for x in range(200):
+    engine_a.step(3.0 * math.sin(0.5 * x))
+
+# Engine B starts with a similar stream — retrieves A's pattern from memory
+for x in range(200):
+    engine_b.step(3.0 * math.sin(0.5 * x + 1.0))
+# Engine B converges faster because it starts from A's discovery
 ```
-
-The new fractal is initialized with the novel input as its prototype, giving it a head start. From there, the other three pillars take over: feedback loops close around it, approximability refines it, and composability may eventually fold it into a hierarchy.
-
-The `novelty_threshold` parameter controls the explore/exploit tradeoff. A high threshold (0.7) means the system tolerates moderate mismatch before spawning — it tries to reuse what it has. A low threshold (0.3) makes it spawn aggressively, creating more specialized fractals.
-
-In the sequence demo, exploration happens exactly three times — once for A, once for B, once for C. After that, the system exploits its three learned fractals for the remaining 297 steps, refining them from fitness 0.0 to 1.0.
-
-**Key files:** [`engine.py`](cognitive_fractal/engine.py) (`_select_fractal()`, `_spawn_fractal()`), [`compare.py`](cognitive_fractal/compare.py) (`similarity()`)
-
----
-
-## The Four Pillars Working Together
-
-The pillars are not independent features. They form a continuous cycle, exactly as described in the theoretical framework:
-
-```
-         ┌─────────────────────────────────────────┐
-         │                                         │
-   Input arrives                                   │
-         │                                         │
-         ▼                                         │
-   ┌───────────┐    match    ┌───────────────┐     │
-   │  Pattern   │───────────▶│   Reinforce   │     │
-   │   Match    │            │  (Feedback +  │     │
-   │(Similarity)│            │ Approximation)│     │
-   └───────────┘            └───────────────┘     │
-         │                         │               │
-      no match                  updated            │
-         │                      fractal            │
-         ▼                         │               │
-   ┌───────────┐                   │               │
-   │  Explore  │                   ▼               │
-   │  (Spawn   │            ┌───────────────┐      │
-   │   new)    │            │  Integration  │      │
-   └───────────┘            │  (Store in    │      │
-         │                  │   Memory)     │      │
-         │                  └───────────────┘      │
-         │                         │               │
-         └─────────────────────────┘───────────────┘
-                                         │
-                              Compose into hierarchy
-                              when patterns co-occur
-```
-
-1. Input arrives. The engine searches memory for a matching fractal (**Composability** — reuse what you know).
-2. If a match is found, the fractal processes the input and receives feedback (**Feedback Loops**). Its prototype and weights improve (**Approximability**).
-3. If no match is found, a new fractal is spawned (**Exploration**) and integrated into memory.
-4. Over time, co-occurring fractals can be composed into hierarchies (**Composability** again), creating higher-level abstractions.
-
-## Dual Memory Architecture
-
-The system implements two types of memory, mirroring the theoretical distinction between patterns and state.
-
-**Type A — Patterns (The Code):** Each fractal's learned state — its prototype, variance, and prediction weights — is a compressed, reusable abstraction. This is stored in hot memory as live objects or in cold memory as serialized dicts via `fractal.compress()`.
-
-**Type B — State (The Data):** The engine's context buffer holds a sliding window of recent signals. This is dynamic, temporal context — what happened recently — as opposed to the timeless patterns stored in fractals.
-
-**The Archival Mechanism:** When hot memory reaches capacity, low-fitness fractals are compressed and moved to cold storage. High-fitness fractals and children of active composed fractals are protected. Cold fractals can be promoted back to hot when accessed.
 
 ## Project Structure
 
 ```
 cognitive_fractal/
-├── types.py       # Signal, Feedback, Metrics — the data flowing through the system
-├── compare.py     # Subtraction (edges), division (ratios), cosine similarity
-├── fractal.py     # The atomic learning unit — where all four pillars live
-├── memory.py      # Hot/cold tiered storage with learned-prototype similarity
-├── engine.py      # Learning loop orchestrator — select, spawn, compose
+├── types.py             # Signal, Feedback, Metrics
+├── compare.py           # Subtraction, division, cosine similarity
+├── fractal.py           # The atomic learning unit (core layer)
+├── memory.py            # Hot/cold tiered storage with signature similarity
+├── engine.py            # Core learning loop orchestrator
+├── function_fractal.py  # 14 function fractal types (linear → composed)
+├── nested_fractal.py    # True nested composition g(f(x))
+├── symbolic_engine.py   # Symbolic function discovery engine
+├── predictor.py         # SequencePredictor — clean user-facing API
 tests/
-├── test_fractal.py       # Atomic fractal: process, learn, convergence
-├── test_composition.py   # Hierarchical fractals: children, propagation
-├── test_memory.py        # Store, retrieve, evict, promote, similarity
-├── test_engine.py        # Full learning loop, sequence learning, spawning
+├── test_fractal.py      # Core fractal: process, learn, convergence
+├── test_composition.py  # Hierarchical fractals: children, propagation
+├── test_memory.py       # Store, retrieve, evict, promote, similarity
+├── test_engine.py       # Core learning loop, sequence learning
+├── test_symbolic.py     # Symbolic engine: discovery, composition, memory
+├── test_transfer.py     # Cross-stream transfer learning
+├── test_improvements.py # Gradient descent, exotic types, library restore
+├── test_predictor.py    # SequencePredictor, nested fractal, MVP streams
 demos/
-└── demo_sequence.py      # Learn A-B-C-A-B-C — proof of actual learning
-```
-
-## Quick Start
-
-```bash
-pip install numpy
-python demos/demo_sequence.py
-```
-
-Run the tests:
-
-```bash
-pip install pytest
-python -m pytest tests/ -v
+├── demo_mvp.py          # Sequence prediction: quadratic + Mandelbrot
+├── demo_symbolic.py     # Symbolic discovery: linear, quadratic, sin, poly
+├── demo_transfer.py     # Cross-stream pattern reuse
+├── demo_improvements.py # Gradient fitting, exotic functions, composed reuse
+├── demo_sequence.py     # Core learning: A-B-C-A-B-C sequence
+└── demo_multiscale.py   # Multi-scale signal prediction
 ```
 
 ## Requirements

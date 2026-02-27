@@ -10,6 +10,23 @@ from .engine import FractalEngine
 from .memory import Memory
 from .types import Signal, Feedback, Metrics
 from .compare import deviation, deviation_magnitude, ratio, similarity
+from .function_fractal import (
+    FunctionFractal,
+    ConstantFractal,
+    LinearFractal,
+    QuadraticFractal,
+    PolynomialFractal,
+    SinFractal,
+    CosFractal,
+    GradientSinFractal,
+    GradientCosFractal,
+    ExponentialFractal,
+    LogFractal,
+    ComposedFunctionFractal,
+)
+from .nested_fractal import NestedComposedFractal
+from .symbolic_engine import SymbolicEngine
+from .predictor import SequencePredictor
 
 __all__ = [
     "Fractal",
@@ -22,4 +39,19 @@ __all__ = [
     "deviation_magnitude",
     "ratio",
     "similarity",
+    "FunctionFractal",
+    "ConstantFractal",
+    "LinearFractal",
+    "QuadraticFractal",
+    "PolynomialFractal",
+    "SinFractal",
+    "CosFractal",
+    "GradientSinFractal",
+    "GradientCosFractal",
+    "ExponentialFractal",
+    "LogFractal",
+    "ComposedFunctionFractal",
+    "NestedComposedFractal",
+    "SymbolicEngine",
+    "SequencePredictor",
 ]

@@ -27,6 +27,9 @@ class Memory:
         self.cold: Dict[str, dict] = {}
         self.hot_capacity = hot_capacity
         self.cold_capacity = cold_capacity
+        # Signature index for FunctionFractal similarity search.
+        # Maps fractal_id -> normalized output vector (shape signature).
+        self._signatures: Dict[str, np.ndarray] = {}
 
     # ================================================================
     # STORE / RETRIEVE
@@ -35,6 +38,9 @@ class Memory:
     def store(self, fractal: Fractal):
         """Add a fractal to hot memory."""
         self.hot[fractal.id] = fractal
+        # Auto-index function signatures for pattern library search
+        if hasattr(fractal, '_signature') and np.any(fractal._signature != 0):
+            self._signatures[fractal.id] = fractal._signature
         if len(self.hot) > self.hot_capacity:
             self._evict()
 
@@ -78,6 +84,46 @@ class Memory:
                 q = np.zeros(frac.dim)
                 q[: len(query)] = query
             sim = similarity(q, frac.prototype)
+            candidates.append((frac, sim))
+
+        candidates.sort(key=lambda x: x[1], reverse=True)
+        return candidates[:top_k]
+
+    def update_signature(self, fractal_id: str, signature: np.ndarray) -> None:
+        """Store or update the function signature for a fractal."""
+        self._signatures[fractal_id] = signature
+
+    def find_similar_by_signature(
+        self,
+        query_signature: np.ndarray,
+        domain: Optional[str] = None,
+        top_k: int = 5,
+        min_fitness: float = 0.0,
+    ) -> List[Tuple[Fractal, float]]:
+        """Find fractals whose function signatures best match the query.
+
+        Unlike find_similar() which uses prototypes, this compares
+        function output shapes. Designed for FunctionFractal similarity.
+
+        Args:
+            query_signature: A normalized output vector (from compute_signature)
+            domain: Optional domain filter
+            top_k: Number of results to return
+            min_fitness: Minimum fitness threshold for candidates
+
+        Returns:
+            List of (fractal, similarity_score) sorted descending.
+        """
+        candidates = []
+        for frac_id, sig in self._signatures.items():
+            frac = self.hot.get(frac_id)
+            if frac is None:
+                continue
+            if domain is not None and frac.domain != domain:
+                continue
+            if frac.metrics.fitness() < min_fitness:
+                continue
+            sim = similarity(query_signature, sig)
             candidates.append((frac, sim))
 
         candidates.sort(key=lambda x: x[1], reverse=True)
@@ -130,6 +176,7 @@ class Memory:
                     ),
                 )
                 del self.cold[oldest_id]
+                self._signatures.pop(oldest_id, None)
 
     def _promote(self, fractal_id: str) -> Fractal:
         """Restore a fractal from cold to hot."""
@@ -149,6 +196,7 @@ class Memory:
             "cold_count": len(self.cold),
             "hot_capacity": self.hot_capacity,
             "cold_capacity": self.cold_capacity,
+            "signature_count": len(self._signatures),
             "avg_fitness": (
                 float(
                     np.mean([f.metrics.fitness() for f in self.hot.values()])
