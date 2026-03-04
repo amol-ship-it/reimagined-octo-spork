@@ -345,7 +345,7 @@ class TestLoadComposedTemplates:
         composed.metrics.prediction_error_ema = 0.1
         shared.store(composed)
 
-        engine = SymbolicEngine(window_size=10, memory=shared)
+        engine = SymbolicEngine(window_size=10, max_candidates=30, memory=shared)
         engine.step(0.0)
 
         # Check that a composed template was loaded
@@ -376,10 +376,11 @@ class TestLoadComposedTemplates:
 class TestExpandedCandidatePool:
     """Test that the expanded candidate pool includes new types."""
 
-    def test_default_pool_has_11_candidates(self):
-        engine = SymbolicEngine(window_size=10)
+    def test_default_pool_has_29_candidates(self):
+        engine = SymbolicEngine(window_size=10, max_candidates=40)
         engine.step(0.0)
-        assert len(engine.candidates) == 11
+        # 11 base types + 18 inverted compositions (9 base functions × 2 degrees)
+        assert len(engine.candidates) == 29
 
     def test_gradient_sin_in_pool(self):
         engine = SymbolicEngine(window_size=10)

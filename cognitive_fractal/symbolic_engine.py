@@ -43,6 +43,9 @@ from .function_fractal import (
     ComposedFunctionFractal,
 )
 from .nested_fractal import NestedComposedFractal
+from .base_functions import BASE_FUNCTIONS
+from .inverted_composition import InvertedCompositionFractal
+from .mixed_inner import MixedInnerFractal
 
 
 class SymbolicEngine:
@@ -97,6 +100,14 @@ class SymbolicEngine:
             ExponentialFractal(),
             LogFractal(),
         ]
+
+        # Generate inverted composition candidates from the base
+        # function dictionary: outer(poly(x)) for each outer × degree
+        for _name, base_func in BASE_FUNCTIONS.items():
+            for degree in [1, 2]:
+                candidates.append(
+                    InvertedCompositionFractal(base_func, degree=degree)
+                )
         for c in candidates:
             c.predict_horizon = self.predict_horizon
             self._seed_from_library(c)
@@ -462,8 +473,108 @@ class SymbolicEngine:
                 except Exception:
                     continue
 
+        # --- Inversion-based pass using the base function dictionary ---
+        # For each dictionary entry F, try y = F(poly(x)) directly.
+        # This solves the problem where the forward approach fails for
+        # oscillating data (sin, cos) by applying F⁻¹ first.
+        best_inverted = None
+        for _name, base_func in BASE_FUNCTIONS.items():
+            for degree in [1, 2]:
+                try:
+                    trial = InvertedCompositionFractal(base_func, degree=degree)
+                    trial.fit(x, y)
+                    trial_pred = trial.evaluate(x)
+                    if not np.all(np.isfinite(trial_pred)):
+                        continue
+                    trial_rmse = float(
+                        np.sqrt(np.mean((y - trial_pred) ** 2))
+                    )
+                    if trial_rmse < best_nested_rmse * (
+                        1 - self.composition_threshold
+                    ):
+                        best_nested_rmse = trial_rmse
+                        best_inverted = trial
+                        # Clear forward-approach result since inversion is better
+                        best_inner = None
+                        best_outer = None
+                except Exception:
+                    continue
+
+        # --- Two-level inversion pass: F(G(poly(x))) ---
+        # Try two-level compositions when single-level isn't enough.
+        # Only a subset of pairs to limit cost in the streaming engine.
+        best_double = None
+        _priority_funcs = ["sin", "cos", "exp", "log", "tan", "tanh"]
+        for oname in _priority_funcs:
+            if oname not in BASE_FUNCTIONS:
+                continue
+            for iname in _priority_funcs:
+                if iname not in BASE_FUNCTIONS:
+                    continue
+                try:
+                    trial = InvertedCompositionFractal(
+                        [BASE_FUNCTIONS[oname], BASE_FUNCTIONS[iname]], degree=1
+                    )
+                    trial.fit(x, y)
+                    trial_pred = trial.evaluate(x)
+                    if not np.all(np.isfinite(trial_pred)):
+                        continue
+                    trial_rmse = float(
+                        np.sqrt(np.mean((y - trial_pred) ** 2))
+                    )
+                    if trial_rmse < best_nested_rmse * (
+                        1 - self.composition_threshold
+                    ):
+                        best_nested_rmse = trial_rmse
+                        best_double = trial
+                        best_inverted = None
+                        best_inner = None
+                        best_outer = None
+                except Exception:
+                    continue
+
+        # --- Mixed inner pass: F(poly(x) + G(inner_poly(x))) ---
+        best_mixed = None
+        for _fname, base_func in BASE_FUNCTIONS.items():
+            for degree in [1, 2]:
+                try:
+                    trial = MixedInnerFractal(base_func, poly_degree=degree)
+                    trial.fit(x, y)
+                    trial_pred = trial.evaluate(x)
+                    if not np.all(np.isfinite(trial_pred)):
+                        continue
+                    # Only accept if an inner function was actually discovered
+                    if trial.inner_func is None:
+                        continue
+                    trial_rmse = float(
+                        np.sqrt(np.mean((y - trial_pred) ** 2))
+                    )
+                    if trial_rmse < best_nested_rmse * (
+                        1 - self.composition_threshold
+                    ):
+                        best_nested_rmse = trial_rmse
+                        best_mixed = trial
+                        best_double = None
+                        best_inverted = None
+                        best_inner = None
+                        best_outer = None
+                except Exception:
+                    continue
+
         # Create nested composition if significant improvement found
-        if best_inner is not None and best_outer is not None:
+        if best_mixed is not None:
+            best_mixed.predict_horizon = self.predict_horizon
+            self.candidates.append(best_mixed)
+            self.memory.store(best_mixed)
+        elif best_double is not None:
+            best_double.predict_horizon = self.predict_horizon
+            self.candidates.append(best_double)
+            self.memory.store(best_double)
+        elif best_inverted is not None:
+            best_inverted.predict_horizon = self.predict_horizon
+            self.candidates.append(best_inverted)
+            self.memory.store(best_inverted)
+        elif best_inner is not None and best_outer is not None:
             inner_copy = copy.deepcopy(best_inner)
             nested = NestedComposedFractal(inner_copy, best_outer)
             nested.predict_horizon = self.predict_horizon

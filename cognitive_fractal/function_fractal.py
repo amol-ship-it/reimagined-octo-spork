@@ -45,9 +45,9 @@ class FunctionFractal(Fractal):
         func_name: str,
         learning_rate: float = 0.05,
     ):
-        # dim=1: we bypass the base linear prediction entirely.
-        # Metrics, Memory, IDs, children all still work.
-        super().__init__(dim=1, domain="symbolic", learning_rate=learning_rate)
+        # dim=n_coeffs: prototype tracks smoothed coefficients,
+        # variance tracks coefficient stability across successive fits.
+        super().__init__(dim=n_coeffs, domain="symbolic", learning_rate=learning_rate)
         self.func_name = func_name
         self.coefficients = np.zeros(n_coeffs)
 
@@ -88,12 +88,18 @@ class FunctionFractal(Fractal):
         Used for transfer learning: copy learned coefficients from a
         library pattern into a fresh candidate. The copy is independent —
         mutating one does not affect the other.
+
+        Also transfers prototype and variance so the seeded fractal
+        inherits the donor's coefficient stability knowledge.
         """
         if (
             type(self) == type(other)
             and len(self.coefficients) == len(other.coefficients)
         ):
             self.coefficients = other.coefficients.copy()
+            if self.dim == other.dim:
+                self.prototype = other.prototype.copy()
+                self.variance = other.variance.copy()
             self._signature = self.compute_signature()
 
     # --- Abstract interface (subclasses must implement) ---
@@ -134,6 +140,16 @@ class FunctionFractal(Fractal):
 
         # Update signature for pattern library similarity search
         self._signature = self.compute_signature()
+
+        # --- Coefficient stability tracking (Fractal learning) ---
+        # prototype = EMA of coefficients across successive fits
+        # variance = how much coefficients change between fits
+        if len(self.coefficients) == self.dim:
+            coeff_delta = self.coefficients - self.prototype
+            var_error = coeff_delta ** 2 - self.variance
+            self.variance += self.variance_rate * var_error
+            self.variance = np.maximum(self.variance, 1e-6)
+            self.prototype += self.learning_rate * coeff_delta
 
         # Compute window RMSE as novelty
         y_pred_window = self.evaluate(x_window)
@@ -709,6 +725,7 @@ class LogFractal(FunctionFractal):
 # ================================================================
 # COMPOSITION
 # ================================================================
+
 
 class ComposedFunctionFractal(FunctionFractal):
     """A function built by combining two child functions.

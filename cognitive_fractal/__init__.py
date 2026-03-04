@@ -25,8 +25,13 @@ from .function_fractal import (
     ComposedFunctionFractal,
 )
 from .nested_fractal import NestedComposedFractal
+from .base_functions import BASE_FUNCTIONS, BaseFunction
+from .inverted_composition import InvertedCompositionFractal
+from .mixed_inner import MixedInnerFractal
 from .symbolic_engine import SymbolicEngine
 from .predictor import SequencePredictor
+from .csv_discoverer import CSVFunctionDiscoverer, DiscoveryResult
+from .pattern_store import PatternStore
 
 __all__ = [
     "Fractal",
@@ -52,6 +57,13 @@ __all__ = [
     "LogFractal",
     "ComposedFunctionFractal",
     "NestedComposedFractal",
+    "BASE_FUNCTIONS",
+    "BaseFunction",
+    "InvertedCompositionFractal",
+    "MixedInnerFractal",
     "SymbolicEngine",
     "SequencePredictor",
+    "CSVFunctionDiscoverer",
+    "DiscoveryResult",
+    "PatternStore",
 ]
